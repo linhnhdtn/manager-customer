@@ -3,7 +3,10 @@ export interface Customer {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
-  metafield: {
+  cartLimitMetafield: {
+    value: string;
+  } | null;
+  annualLimitMetafield: {
     value: string;
   } | null;
 }

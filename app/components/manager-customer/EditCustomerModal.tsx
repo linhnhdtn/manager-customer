@@ -17,17 +17,19 @@ export function EditCustomerModal({
   fetcher,
   shopify,
 }: EditCustomerModalProps) {
-  const [value, setValue] = useState(customer.metafield?.value || "");
+  const [cartLimit, setCartLimit] = useState(customer.cartLimitMetafield?.value || "");
+  const [annualLimit, setAnnualLimit] = useState(customer.annualLimitMetafield?.value || "");
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const isLoading = fetcher.state === "submitting";
 
-  // Reset value and submitted flag when modal opens
+  // Reset values and submitted flag when modal opens
   useEffect(() => {
     if (isOpen) {
-      setValue(customer.metafield?.value || "");
+      setCartLimit(customer.cartLimitMetafield?.value || "");
+      setAnnualLimit(customer.annualLimitMetafield?.value || "");
       setHasSubmitted(false);
     }
-  }, [isOpen, customer.metafield?.value]);
+  }, [isOpen, customer.cartLimitMetafield?.value, customer.annualLimitMetafield?.value]);
 
   // Handle fetcher response
   useEffect(() => {
@@ -48,15 +50,22 @@ export function EditCustomerModal({
   }, [fetcher.state, fetcher.data, hasSubmitted, isOpen, shopify, onClose]);
 
   const handleSave = () => {
-    if (!value || value.trim() === "") {
-      shopify.toast.show("Please enter a value", { isError: true });
-      return;
+    // Validate cart limit
+    if (cartLimit && cartLimit.trim() !== "") {
+      const numCartLimit = parseInt(cartLimit, 10);
+      if (isNaN(numCartLimit) || numCartLimit < 0) {
+        shopify.toast.show("Cart limit must be a valid positive number", { isError: true });
+        return;
+      }
     }
 
-    const numValue = parseInt(value, 10);
-    if (isNaN(numValue) || numValue < 0) {
-      shopify.toast.show("Please enter a valid positive number", { isError: true });
-      return;
+    // Validate annual limit
+    if (annualLimit && annualLimit.trim() !== "") {
+      const numAnnualLimit = parseInt(annualLimit, 10);
+      if (isNaN(numAnnualLimit) || numAnnualLimit < 0) {
+        shopify.toast.show("Annual limit must be a valid positive number", { isError: true });
+        return;
+      }
     }
 
     // Mark that we've submitted to track the response
@@ -65,7 +74,8 @@ export function EditCustomerModal({
     fetcher.submit(
       {
         customerId: customer.id,
-        maxAmount: value,
+        cartLimit: cartLimit || "",
+        annualLimit: annualLimit || "",
       },
       {
         method: "POST",
@@ -108,15 +118,15 @@ export function EditCustomerModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ margin: "0 0 8px 0", fontSize: "20px", fontWeight: 600 }}>
-          Edit Max Amount
+          Edit Customer Limits
         </h2>
         <p style={{ margin: "0 0 24px 0", color: "#6d7175", fontSize: "14px" }}>
           {customerName}
         </p>
 
-        <div style={{ marginBottom: "24px" }}>
+        <div style={{ marginBottom: "20px" }}>
           <label
-            htmlFor="max-amount-input"
+            htmlFor="cart-limit-input"
             style={{
               display: "block",
               marginBottom: "8px",
@@ -125,13 +135,13 @@ export function EditCustomerModal({
               color: "#202223",
             }}
           >
-            Max Amount
+            Cart Limit
           </label>
           <input
-            id="max-amount-input"
+            id="cart-limit-input"
             type="number"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
+            value={cartLimit}
+            onChange={(e) => setCartLimit(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !isLoading) {
                 e.preventDefault();
@@ -139,10 +149,49 @@ export function EditCustomerModal({
               }
             }}
             disabled={isLoading}
-            placeholder="Enter value"
+            placeholder="Enter cart limit"
             min="0"
             step="1"
             autoFocus
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              border: "1px solid #c9cccf",
+              borderRadius: "4px",
+              fontSize: "14px",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="annual-limit-input"
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "14px",
+              fontWeight: 500,
+              color: "#202223",
+            }}
+          >
+            Annual Purchase Limit
+          </label>
+          <input
+            id="annual-limit-input"
+            type="number"
+            value={annualLimit}
+            onChange={(e) => setAnnualLimit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isLoading) {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            disabled={isLoading}
+            placeholder="Enter annual limit"
+            min="0"
+            step="1"
             style={{
               width: "100%",
               padding: "10px 12px",

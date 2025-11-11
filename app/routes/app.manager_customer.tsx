@@ -3,11 +3,22 @@ import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { BulkUpdateSection, EditableMetafieldCell } from "../components/manager-customer";
-import type { Customer, LoaderData } from "../components/manager-customer";
+import type {
+  Customer,
+  LoaderData,
+  AdminGraphQL,
+  MetafieldDefinitionsData,
+  MetafieldDefinitionCreateData,
+  CustomersData,
+  CustomerIdsData,
+  MetafieldsSetData,
+  MetafieldsSetInput,
+  Edge,
+} from "../components/manager-customer";
 
 // Helper function to ensure metafield definition exists
-async function ensureMetafieldDefinition(admin: any) {
-  const checkResponse = await admin.graphql(
+async function ensureMetafieldDefinition(admin: AdminGraphQL) {
+  const checkResponse = await admin.graphql<MetafieldDefinitionsData>(
     `#graphql
     query CheckMetafieldDefinition {
       metafieldDefinitions(first: 10, ownerType: CUSTOMER) {
@@ -26,12 +37,12 @@ async function ensureMetafieldDefinition(admin: any) {
   const checkJson = await checkResponse.json();
   const definitions = checkJson.data?.metafieldDefinitions?.edges || [];
 
-  const exists = definitions.some((edge: any) =>
+  const exists = definitions.some((edge) =>
     edge.node.namespace === "cart_limits" && edge.node.key === "max_amount"
   );
 
   if (!exists) {
-    await admin.graphql(
+    await admin.graphql<MetafieldDefinitionCreateData>(
       `#graphql
       mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
         metafieldDefinitionCreate(definition: $definition) {
@@ -68,7 +79,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Ensure metafield definition exists
   await ensureMetafieldDefinition(admin);
 
-  const response = await admin.graphql(
+  const response = await admin.graphql<CustomersData>(
     `#graphql
     query GetCustomers {
       customers(first: 50) {
@@ -92,7 +103,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   const responseJson = await response.json();
-  const customers = responseJson.data.customers.edges.map((edge: any) => edge.node);
+  const customers = responseJson.data?.customers.edges.map((edge) => edge.node) || [];
 
   return { customers };
 };
@@ -107,7 +118,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     if (isBulkUpdate) {
       // Get all customers for bulk update
-      const customersResponse = await admin.graphql(
+      const customersResponse = await admin.graphql<CustomerIdsData>(
         `#graphql
         query GetAllCustomers {
           customers(first: 250) {
@@ -121,10 +132,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
 
       const customersJson = await customersResponse.json();
-      const customers = customersJson.data.customers.edges.map((edge: any) => edge.node);
+      const customers = customersJson.data?.customers.edges.map((edge) => edge.node) || [];
 
       // Create metafields array for all customers
-      const metafields = customers.map((customer: any) => ({
+      const metafields: MetafieldsSetInput[] = customers.map((customer) => ({
         ownerId: customer.id,
         namespace: "cart_limits",
         key: "max_amount",
@@ -134,17 +145,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       // Update all customers in batches (GraphQL accepts max 25 metafields per request)
       const batchSize = 25;
-      const batches = [];
+      const batches: MetafieldsSetInput[][] = [];
 
       for (let i = 0; i < metafields.length; i += batchSize) {
         batches.push(metafields.slice(i, i + batchSize));
       }
 
       let totalUpdated = 0;
-      let errors = [];
+      const errors: Array<{ message: string; field?: string | string[] }> = [];
 
       for (const batch of batches) {
-        const response = await admin.graphql(
+        const response = await admin.graphql<MetafieldsSetData>(
           `#graphql
           mutation UpdateCustomerMetafield($metafields: [MetafieldsSetInput!]!) {
             metafieldsSet(metafields: $metafields) {
@@ -170,7 +181,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           errors.push(...responseJson.errors);
         }
 
-        if (responseJson.data?.metafieldsSet?.userErrors?.length > 0) {
+        if (responseJson.data?.metafieldsSet?.userErrors?.length && responseJson.data.metafieldsSet.userErrors.length > 0) {
           errors.push(...responseJson.data.metafieldsSet.userErrors);
         } else if (responseJson.data?.metafieldsSet?.metafields) {
           totalUpdated += responseJson.data.metafieldsSet.metafields.length;
@@ -193,7 +204,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Single customer update
       const customerId = formData.get("customerId") as string;
 
-      const response = await admin.graphql(
+      const response = await admin.graphql<MetafieldsSetData>(
         `#graphql
         mutation UpdateCustomerMetafield($metafields: [MetafieldsSetInput!]!) {
           metafieldsSet(metafields: $metafields) {
@@ -234,7 +245,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         };
       }
 
-      if (responseJson.data.metafieldsSet.userErrors.length > 0) {
+      if (responseJson.data?.metafieldsSet?.userErrors && responseJson.data.metafieldsSet.userErrors.length > 0) {
         return {
           success: false,
           error: responseJson.data.metafieldsSet.userErrors[0]?.message || "Unknown error",
@@ -243,7 +254,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       return {
         success: true,
-        metafield: responseJson.data.metafieldsSet.metafields[0],
+        metafield: responseJson.data?.metafieldsSet?.metafields?.[0],
       };
     }
   } catch (error) {

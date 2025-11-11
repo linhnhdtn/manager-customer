@@ -115,62 +115,151 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
   const formData = await request.formData();
 
-  const customerId = formData.get("customerId") as string;
+  const isBulkUpdate = formData.get("bulkUpdate") === "true";
   const maxAmount = formData.get("maxAmount") as string;
 
   try {
-    const response = await admin.graphql(
-      `#graphql
-      mutation UpdateCustomerMetafield($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          metafields {
-            id
-            namespace
-            key
-            value
+    if (isBulkUpdate) {
+      // Get all customers for bulk update
+      const customersResponse = await admin.graphql(
+        `#graphql
+        query GetAllCustomers {
+          customers(first: 250) {
+            edges {
+              node {
+                id
+              }
+            }
           }
-          userErrors {
-            field
-            message
-          }
-        }
-      }`,
-      {
-        variables: {
-          metafields: [
-            {
-              ownerId: customerId,
-              namespace: "cart_limits",
-              key: "max_amount",
-              value: maxAmount,
-              type: "number_integer",
+        }`,
+      );
+
+      const customersJson = await customersResponse.json();
+      const customers = customersJson.data.customers.edges.map((edge: any) => edge.node);
+
+      // Create metafields array for all customers
+      const metafields = customers.map((customer: any) => ({
+        ownerId: customer.id,
+        namespace: "cart_limits",
+        key: "max_amount",
+        value: maxAmount,
+        type: "number_integer",
+      }));
+
+      // Update all customers in batches (GraphQL accepts max 25 metafields per request)
+      const batchSize = 25;
+      const batches = [];
+
+      for (let i = 0; i < metafields.length; i += batchSize) {
+        batches.push(metafields.slice(i, i + batchSize));
+      }
+
+      let totalUpdated = 0;
+      let errors = [];
+
+      for (const batch of batches) {
+        const response = await admin.graphql(
+          `#graphql
+          mutation UpdateCustomerMetafield($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              metafields {
+                id
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+          {
+            variables: {
+              metafields: batch,
             },
-          ],
+          },
+        );
+
+        const responseJson = await response.json();
+
+        if (responseJson.errors) {
+          errors.push(...responseJson.errors);
+        }
+
+        if (responseJson.data?.metafieldsSet?.userErrors?.length > 0) {
+          errors.push(...responseJson.data.metafieldsSet.userErrors);
+        } else if (responseJson.data?.metafieldsSet?.metafields) {
+          totalUpdated += responseJson.data.metafieldsSet.metafields.length;
+        }
+      }
+
+      if (errors.length > 0) {
+        return {
+          success: false,
+          error: `Updated ${totalUpdated} customers, but encountered errors: ${errors[0]?.message || "Unknown error"}`,
+        };
+      }
+
+      return {
+        success: true,
+        message: `Successfully updated ${totalUpdated} customers`,
+        totalUpdated,
+      };
+    } else {
+      // Single customer update
+      const customerId = formData.get("customerId") as string;
+
+      const response = await admin.graphql(
+        `#graphql
+        mutation UpdateCustomerMetafield($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields {
+              id
+              namespace
+              key
+              value
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+        {
+          variables: {
+            metafields: [
+              {
+                ownerId: customerId,
+                namespace: "cart_limits",
+                key: "max_amount",
+                value: maxAmount,
+                type: "number_integer",
+              },
+            ],
+          },
         },
-      },
-    );
+      );
 
-    const responseJson = await response.json();
+      const responseJson = await response.json();
 
-    // Check for GraphQL errors
-    if (responseJson.errors) {
+      // Check for GraphQL errors
+      if (responseJson.errors) {
+        return {
+          success: false,
+          error: responseJson.errors[0]?.message || "Unknown error occurred",
+        };
+      }
+
+      if (responseJson.data.metafieldsSet.userErrors.length > 0) {
+        return {
+          success: false,
+          error: responseJson.data.metafieldsSet.userErrors[0]?.message || "Unknown error",
+        };
+      }
+
       return {
-        success: false,
-        error: responseJson.errors[0]?.message || "Unknown error occurred",
+        success: true,
+        metafield: responseJson.data.metafieldsSet.metafields[0],
       };
     }
-
-    if (responseJson.data.metafieldsSet.userErrors.length > 0) {
-      return {
-        success: false,
-        error: responseJson.data.metafieldsSet.userErrors[0]?.message || "Unknown error",
-      };
-    }
-
-    return {
-      success: true,
-      metafield: responseJson.data.metafieldsSet.metafields[0],
-    };
   } catch (error) {
     return {
       success: false,
@@ -178,6 +267,117 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 };
+
+function BulkUpdateSection() {
+  const fetcher = useFetcher<typeof action>({ key: "bulk-update" });
+  const shopify = useAppBridge();
+  const [bulkValue, setBulkValue] = useState("");
+  const isSubmittingRef = useRef(false);
+
+  const isLoading = fetcher.state === "submitting";
+
+  // Handle fetcher state changes
+  useEffect(() => {
+    if (fetcher.state === "submitting") {
+      isSubmittingRef.current = true;
+    }
+
+    if (isSubmittingRef.current && fetcher.state === "idle") {
+      if (fetcher.data?.success) {
+        shopify.toast.show(fetcher.data.message || "All customers updated successfully");
+        setBulkValue("");
+        isSubmittingRef.current = false;
+        // Reload the page to show updated values
+        window.location.reload();
+      } else if (fetcher.data?.error) {
+        shopify.toast.show(`Error: ${fetcher.data.error}`, { isError: true });
+        isSubmittingRef.current = false;
+      }
+    }
+  }, [fetcher.state, fetcher.data, shopify]);
+
+  const handleBulkSave = () => {
+    if (!bulkValue || bulkValue.trim() === "") {
+      shopify.toast.show("Vui lòng nhập giá trị", { isError: true });
+      return;
+    }
+
+    const numValue = parseInt(bulkValue, 10);
+    if (isNaN(numValue) || numValue < 0) {
+      shopify.toast.show("Vui lòng nhập số dương hợp lệ", { isError: true });
+      return;
+    }
+
+    if (!confirm(`Bạn có chắc muốn cập nhật giá trị ${bulkValue} cho TẤT CẢ khách hàng?`)) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
+
+    fetcher.submit(
+      {
+        bulkUpdate: "true",
+        maxAmount: bulkValue,
+      },
+      {
+        method: "POST",
+        navigate: false,
+      }
+    );
+  };
+
+  return (
+    <s-box padding="base" background="subdued" borderRadius="base">
+      <s-block-stack gap="base">
+        <s-text variant="headingSm" as="h3">
+          Cập nhật hàng loạt (Bulk Update)
+        </s-text>
+        <s-paragraph>
+          Nhập giá trị và nhấn "Cập nhật tất cả" để áp dụng cho toàn bộ khách hàng.
+        </s-paragraph>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", maxWidth: "500px" }}>
+          <input
+            type="number"
+            value={bulkValue}
+            onChange={(e) => setBulkValue(e.target.value)}
+            disabled={isLoading}
+            placeholder="Nhập giá trị Max Amount"
+            min="0"
+            step="1"
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #c9cccf",
+              borderRadius: "4px",
+              flex: 1,
+              fontSize: "14px",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleBulkSave}
+            disabled={isLoading}
+            style={{
+              padding: "8px 16px",
+              border: "1px solid #2c6ecb",
+              borderRadius: "4px",
+              backgroundColor: "#2c6ecb",
+              color: "white",
+              cursor: isLoading ? "not-allowed" : "pointer",
+              fontSize: "14px",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              transition: "background-color 0.2s",
+            }}
+            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#1f5199")}
+            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#2c6ecb")}
+          >
+            {isLoading ? "Đang cập nhật..." : "Cập nhật tất cả"}
+          </button>
+        </div>
+      </s-block-stack>
+    </s-box>
+  );
+}
 
 function EditableMetafieldCell({ customer }: { customer: Customer }) {
   const fetcher = useFetcher<typeof action>({ key: `edit-customer-${customer.id}` });
@@ -363,6 +563,10 @@ export default function ManagerCustomer() {
 
   return (
     <s-page heading="Customer Manager">
+      <s-section heading="Bulk Update">
+        <BulkUpdateSection />
+      </s-section>
+
       <s-section heading="All Customers">
         <s-paragraph>
           Danh sách tất cả khách hàng với thông tin tên, email và giới hạn giỏ hàng.

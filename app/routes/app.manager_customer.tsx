@@ -309,12 +309,12 @@ function ConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ margin: "0 0 16px 0", fontSize: "20px", fontWeight: 600 }}>
-          Xác nhận cập nhật hàng loạt
+          Confirm Bulk Update
         </h2>
         <p style={{ margin: "0 0 24px 0", color: "#6d7175", fontSize: "14px", lineHeight: "1.6" }}>
-          Bạn có chắc chắn muốn cập nhật giá trị <strong style={{ color: "#202223" }}>{value}</strong> cho <strong style={{ color: "#202223" }}>TẤT CẢ</strong> khách hàng?
+          Are you sure you want to update the value <strong style={{ color: "#202223" }}>{value}</strong> for <strong style={{ color: "#202223" }}>ALL</strong> customers?
           <br /><br />
-          Hành động này không thể hoàn tác.
+          This action cannot be undone.
         </p>
         <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
           <button
@@ -334,7 +334,7 @@ function ConfirmModal({
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f6f6f7")}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
           >
-            Hủy
+            Cancel
           </button>
           <button
             type="button"
@@ -356,7 +356,7 @@ function ConfirmModal({
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#bf2600")}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#d82c0d")}
           >
-            Xác nhận cập nhật
+            Confirm Update
           </button>
         </div>
       </div>
@@ -394,14 +394,14 @@ function EditCustomerModal({
     // Only process if we've submitted and fetcher is no longer submitting
     if (hasSubmitted && fetcher.state === "idle" && fetcher.data && isOpen) {
       if (fetcher.data.success) {
-        shopify.toast.show("Cập nhật thành công");
+        shopify.toast.show("Updated successfully");
         onClose();
         // Reload to show updated value
         setTimeout(() => {
           window.location.reload();
         }, 100);
       } else if (fetcher.data.error) {
-        shopify.toast.show(`Lỗi: ${fetcher.data.error}`, { isError: true });
+        shopify.toast.show(`Error: ${fetcher.data.error}`, { isError: true });
         setHasSubmitted(false); // Reset to allow retry
       }
     }
@@ -409,13 +409,13 @@ function EditCustomerModal({
 
   const handleSave = () => {
     if (!value || value.trim() === "") {
-      shopify.toast.show("Vui lòng nhập giá trị", { isError: true });
+      shopify.toast.show("Please enter a value", { isError: true });
       return;
     }
 
     const numValue = parseInt(value, 10);
     if (isNaN(numValue) || numValue < 0) {
-      shopify.toast.show("Vui lòng nhập số dương hợp lệ", { isError: true });
+      shopify.toast.show("Please enter a valid positive number", { isError: true });
       return;
     }
 
@@ -438,7 +438,7 @@ function EditCustomerModal({
 
   const customerName = customer.firstName || customer.lastName
     ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
-    : customer.email || "Khách hàng";
+    : customer.email || "Customer";
 
   return (
     <div
@@ -468,7 +468,7 @@ function EditCustomerModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ margin: "0 0 8px 0", fontSize: "20px", fontWeight: 600 }}>
-          Chỉnh sửa Max Amount
+          Edit Max Amount
         </h2>
         <p style={{ margin: "0 0 24px 0", color: "#6d7175", fontSize: "14px" }}>
           {customerName}
@@ -499,7 +499,7 @@ function EditCustomerModal({
               }
             }}
             disabled={isLoading}
-            placeholder="Nhập giá trị"
+            placeholder="Enter value"
             min="0"
             step="1"
             autoFocus
@@ -533,7 +533,7 @@ function EditCustomerModal({
             onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#f6f6f7")}
             onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "transparent")}
           >
-            Hủy
+            Cancel
           </button>
           <button
             type="button"
@@ -553,7 +553,7 @@ function EditCustomerModal({
             onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#1f5199")}
             onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#2c6ecb")}
           >
-            {isLoading ? "Đang lưu..." : "Lưu"}
+            {isLoading ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -574,7 +574,7 @@ function BulkUpdateSection() {
   useEffect(() => {
     if (hasSubmitted && fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.success) {
-        shopify.toast.show(fetcher.data.message || "Cập nhật thành công toàn bộ khách hàng");
+        shopify.toast.show(fetcher.data.message || "All customers updated successfully");
         setBulkValue("");
         setHasSubmitted(false);
         // Reload the page to show updated values
@@ -582,7 +582,7 @@ function BulkUpdateSection() {
           window.location.reload();
         }, 100);
       } else if (fetcher.data.error) {
-        shopify.toast.show(`Lỗi: ${fetcher.data.error}`, { isError: true });
+        shopify.toast.show(`Error: ${fetcher.data.error}`, { isError: true });
         setHasSubmitted(false);
       }
     }
@@ -590,13 +590,13 @@ function BulkUpdateSection() {
 
   const handleBulkSave = () => {
     if (!bulkValue || bulkValue.trim() === "") {
-      shopify.toast.show("Vui lòng nhập giá trị", { isError: true });
+      shopify.toast.show("Please enter a value", { isError: true });
       return;
     }
 
     const numValue = parseInt(bulkValue, 10);
     if (isNaN(numValue) || numValue < 0) {
-      shopify.toast.show("Vui lòng nhập số dương hợp lệ", { isError: true });
+      shopify.toast.show("Please enter a valid positive number", { isError: true });
       return;
     }
 
@@ -631,10 +631,10 @@ function BulkUpdateSection() {
       <s-box padding="base" background="subdued" borderRadius="base">
         <s-block-stack gap="base">
           <s-text variant="headingSm" as="h3">
-            Cập nhật hàng loạt (Bulk Update)
+            Bulk Update
           </s-text>
           <s-paragraph>
-            Nhập giá trị và nhấn "Cập nhật tất cả" để áp dụng cho toàn bộ khách hàng.
+            Enter a value and click "Update All" to apply it to all customers.
           </s-paragraph>
           <div style={{ display: "flex", gap: "12px", alignItems: "center", maxWidth: "500px" }}>
             <input
@@ -642,7 +642,7 @@ function BulkUpdateSection() {
               value={bulkValue}
               onChange={(e) => setBulkValue(e.target.value)}
               disabled={isLoading}
-              placeholder="Nhập giá trị Max Amount"
+              placeholder="Enter Max Amount value"
               min="0"
               step="1"
               style={{
@@ -672,7 +672,7 @@ function BulkUpdateSection() {
               onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#1f5199")}
               onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#2c6ecb")}
             >
-              {isLoading ? "Đang cập nhật..." : "Cập nhật tất cả"}
+              {isLoading ? "Updating..." : "Update All"}
             </button>
           </div>
         </s-block-stack>
@@ -703,7 +703,7 @@ function EditableMetafieldCell({ customer }: { customer: Customer }) {
       />
 
       <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
-        <span>{customer.metafield?.value || "Chưa thiết lập"}</span>
+        <span>{customer.metafield?.value || "Not set"}</span>
         <button
           type="button"
           onClick={handleEdit}
@@ -722,7 +722,7 @@ function EditableMetafieldCell({ customer }: { customer: Customer }) {
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f6f6f7")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
-          Chỉnh sửa
+          Edit
         </button>
       </div>
     </>
@@ -740,7 +740,7 @@ export default function ManagerCustomer() {
 
       <s-section heading="All Customers">
         <s-paragraph>
-          Danh sách tất cả khách hàng với thông tin tên, email và giới hạn giỏ hàng.
+          List of all customers with their name, email, and cart limit information.
         </s-paragraph>
 
         <style>{`
@@ -773,7 +773,7 @@ export default function ManagerCustomer() {
             <table className="customer-table">
               <thead>
                 <tr>
-                  <th>Tên</th>
+                  <th>Name</th>
                   <th>Email</th>
                   <th>Max Amount (Cart Limit)</th>
                 </tr>
@@ -799,7 +799,7 @@ export default function ManagerCustomer() {
 
         {customers.length === 0 && (
           <s-box padding="base" background="subdued" borderRadius="base">
-            <s-paragraph>Không có khách hàng nào.</s-paragraph>
+            <s-paragraph>No customers found.</s-paragraph>
           </s-box>
         )}
       </s-section>

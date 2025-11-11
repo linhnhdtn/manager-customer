@@ -156,9 +156,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     if (isBulkUpdate) {
-      // Bulk update logic (unchanged for now, only updates cart_limits)
+      // Bulk update logic - can update cart or annual limits
       const maxAmount = formData.get("maxAmount") as string;
-      const namespace = "cart_limits";
+      const bulkUpdateType = (formData.get("bulkUpdateType") as string) || "cart";
+      const namespace = bulkUpdateType === "cart" ? "cart_limits" : "annual_purchase_limit";
       const key = "max_amount";
       // Get all customers for bulk update
       const customersResponse = await admin.graphql<CustomerIdsData>(

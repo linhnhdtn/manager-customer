@@ -3,6 +3,7 @@ interface ConfirmModalProps {
   onClose: () => void;
   onConfirm: () => void;
   value: string;
+  type?: "cart" | "annual";
 }
 
 export function ConfirmModal({
@@ -10,8 +11,11 @@ export function ConfirmModal({
   onClose,
   onConfirm,
   value,
+  type = "cart",
 }: ConfirmModalProps) {
   if (!isOpen) return null;
+
+  const limitType = type === "cart" ? "Cart Limit" : "Annual Purchase Limit";
 
   return (
     <div
@@ -41,12 +45,12 @@ export function ConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ margin: "0 0 16px 0", fontSize: "20px", fontWeight: 600 }}>
-          Confirm Bulk Update
+          Confirm Bulk Update - {limitType}
         </h2>
         <p style={{ margin: "0 0 24px 0", color: "#6d7175", fontSize: "14px", lineHeight: "1.6" }}>
-          Are you sure you want to update the value <strong style={{ color: "#202223" }}>{value}</strong> for <strong style={{ color: "#202223" }}>ALL</strong> customers?
+          Are you sure you want to set <strong style={{ color: "#202223" }}>{limitType}</strong> to <strong style={{ color: "#202223" }}>{value}</strong> for <strong style={{ color: "#202223" }}>ALL</strong> customers?
           <br /><br />
-          This action cannot be undone.
+          This action will update all existing customer records and cannot be undone.
         </p>
         <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
           <button

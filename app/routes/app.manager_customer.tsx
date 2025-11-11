@@ -364,34 +364,229 @@ function ConfirmModal({
   );
 }
 
+function EditCustomerModal({
+  isOpen,
+  onClose,
+  customer,
+  fetcher,
+  shopify,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  customer: Customer;
+  fetcher: any;
+  shopify: any;
+}) {
+  const [value, setValue] = useState(customer.metafield?.value || "");
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const isLoading = fetcher.state === "submitting";
+
+  // Reset value and submitted flag when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setValue(customer.metafield?.value || "");
+      setHasSubmitted(false);
+    }
+  }, [isOpen, customer.metafield?.value]);
+
+  // Handle fetcher response
+  useEffect(() => {
+    // Only process if we've submitted and fetcher is no longer submitting
+    if (hasSubmitted && fetcher.state === "idle" && fetcher.data && isOpen) {
+      if (fetcher.data.success) {
+        shopify.toast.show("Cập nhật thành công");
+        onClose();
+        // Reload to show updated value
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      } else if (fetcher.data.error) {
+        shopify.toast.show(`Lỗi: ${fetcher.data.error}`, { isError: true });
+        setHasSubmitted(false); // Reset to allow retry
+      }
+    }
+  }, [fetcher.state, fetcher.data, hasSubmitted, isOpen, shopify, onClose]);
+
+  const handleSave = () => {
+    if (!value || value.trim() === "") {
+      shopify.toast.show("Vui lòng nhập giá trị", { isError: true });
+      return;
+    }
+
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue) || numValue < 0) {
+      shopify.toast.show("Vui lòng nhập số dương hợp lệ", { isError: true });
+      return;
+    }
+
+    // Mark that we've submitted to track the response
+    setHasSubmitted(true);
+
+    fetcher.submit(
+      {
+        customerId: customer.id,
+        maxAmount: value,
+      },
+      {
+        method: "POST",
+        navigate: false,
+      }
+    );
+  };
+
+  if (!isOpen) return null;
+
+  const customerName = customer.firstName || customer.lastName
+    ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
+    : customer.email || "Khách hàng";
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          backgroundColor: "white",
+          borderRadius: "8px",
+          padding: "24px",
+          maxWidth: "500px",
+          width: "90%",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ margin: "0 0 8px 0", fontSize: "20px", fontWeight: 600 }}>
+          Chỉnh sửa Max Amount
+        </h2>
+        <p style={{ margin: "0 0 24px 0", color: "#6d7175", fontSize: "14px" }}>
+          {customerName}
+        </p>
+
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="max-amount-input"
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "14px",
+              fontWeight: 500,
+              color: "#202223",
+            }}
+          >
+            Max Amount
+          </label>
+          <input
+            id="max-amount-input"
+            type="number"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isLoading) {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            disabled={isLoading}
+            placeholder="Nhập giá trị"
+            min="0"
+            step="1"
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              border: "1px solid #c9cccf",
+              borderRadius: "4px",
+              fontSize: "14px",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isLoading}
+            style={{
+              padding: "10px 20px",
+              border: "1px solid #c9cccf",
+              borderRadius: "4px",
+              backgroundColor: "transparent",
+              color: "#202223",
+              cursor: isLoading ? "not-allowed" : "pointer",
+              fontSize: "14px",
+              fontWeight: 500,
+              transition: "background-color 0.2s",
+            }}
+            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#f6f6f7")}
+            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isLoading}
+            style={{
+              padding: "10px 20px",
+              border: "1px solid #2c6ecb",
+              borderRadius: "4px",
+              backgroundColor: "#2c6ecb",
+              color: "white",
+              cursor: isLoading ? "not-allowed" : "pointer",
+              fontSize: "14px",
+              fontWeight: 500,
+              transition: "background-color 0.2s",
+            }}
+            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#1f5199")}
+            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#2c6ecb")}
+          >
+            {isLoading ? "Đang lưu..." : "Lưu"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BulkUpdateSection() {
   const fetcher = useFetcher<typeof action>({ key: "bulk-update" });
   const shopify = useAppBridge();
   const [bulkValue, setBulkValue] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const isSubmittingRef = useRef(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
 
   const isLoading = fetcher.state === "submitting";
 
-  // Handle fetcher state changes
+  // Handle fetcher response
   useEffect(() => {
-    if (fetcher.state === "submitting") {
-      isSubmittingRef.current = true;
-    }
-
-    if (isSubmittingRef.current && fetcher.state === "idle") {
-      if (fetcher.data?.success) {
-        shopify.toast.show(fetcher.data.message || "All customers updated successfully");
+    if (hasSubmitted && fetcher.state === "idle" && fetcher.data) {
+      if (fetcher.data.success) {
+        shopify.toast.show(fetcher.data.message || "Cập nhật thành công toàn bộ khách hàng");
         setBulkValue("");
-        isSubmittingRef.current = false;
+        setHasSubmitted(false);
         // Reload the page to show updated values
-        window.location.reload();
-      } else if (fetcher.data?.error) {
-        shopify.toast.show(`Error: ${fetcher.data.error}`, { isError: true });
-        isSubmittingRef.current = false;
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      } else if (fetcher.data.error) {
+        shopify.toast.show(`Lỗi: ${fetcher.data.error}`, { isError: true });
+        setHasSubmitted(false);
       }
     }
-  }, [fetcher.state, fetcher.data, shopify]);
+  }, [fetcher.state, fetcher.data, hasSubmitted, shopify]);
 
   const handleBulkSave = () => {
     if (!bulkValue || bulkValue.trim() === "") {
@@ -410,7 +605,7 @@ function BulkUpdateSection() {
   };
 
   const handleConfirm = () => {
-    isSubmittingRef.current = true;
+    setHasSubmitted(true);
 
     fetcher.submit(
       {
@@ -489,179 +684,48 @@ function BulkUpdateSection() {
 function EditableMetafieldCell({ customer }: { customer: Customer }) {
   const fetcher = useFetcher<typeof action>({ key: `edit-customer-${customer.id}` });
   const shopify = useAppBridge();
-  const [isEditing, setIsEditing] = useState(false);
-  const [value, setValue] = useState(customer.metafield?.value || "");
-  const prevStateRef = useRef(fetcher.state);
-  const isSubmittingRef = useRef(false);
+  const [showModal, setShowModal] = useState(false);
 
-  const isLoading = fetcher.state === "submitting";
-
-  // Handle fetcher state changes
-  useEffect(() => {
-    // Track when we start submitting
-    if (fetcher.state === "submitting") {
-      isSubmittingRef.current = true;
-    }
-
-    // Detect transition from submitting to idle
-    if (isSubmittingRef.current && fetcher.state === "idle" && isEditing) {
-      if (fetcher.data?.success) {
-        shopify.toast.show("Metafield updated successfully");
-        setIsEditing(false);
-        isSubmittingRef.current = false;
-      } else if (fetcher.data?.error) {
-        shopify.toast.show(`Error: ${fetcher.data.error}`, { isError: true });
-        isSubmittingRef.current = false;
-      }
-    }
-
-    prevStateRef.current = fetcher.state;
-  }, [fetcher.state, fetcher.data, isEditing, shopify, customer.id]);
-
-  const handleSave = async () => {
-    // Validate that value is a valid number
-    if (!value || value.trim() === "") {
-      shopify.toast.show("Please enter a valid amount", { isError: true });
-      return;
-    }
-
-    const numValue = parseInt(value, 10);
-    if (isNaN(numValue) || numValue < 0) {
-      shopify.toast.show("Please enter a valid positive number", { isError: true });
-      return;
-    }
-
-    // Mark that we're starting to submit
-    isSubmittingRef.current = true;
-
-    fetcher.submit(
-      {
-        customerId: customer.id,
-        maxAmount: value,
-      },
-      {
-        method: "POST",
-        // Prevent navigation
-        navigate: false,
-      }
-    );
+  const handleEdit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowModal(true);
   };
 
-  const handleCancel = () => {
-    setValue(customer.metafield?.value || "");
-    setIsEditing(false);
-  };
+  return (
+    <>
+      <EditCustomerModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        customer={customer}
+        fetcher={fetcher}
+        shopify={shopify}
+      />
 
-  if (isEditing) {
-    return (
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleSave();
-            }
-          }}
-          disabled={isLoading}
-          placeholder="Enter amount"
-          min="0"
-          step="1"
-          style={{
-            padding: "6px 12px",
-            border: "1px solid #c9cccf",
-            borderRadius: "4px",
-            flex: 1,
-          }}
-        />
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+        <span>{customer.metafield?.value || "Chưa thiết lập"}</span>
         <button
           type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleSave();
-          }}
-          disabled={isLoading}
-          className="save-button"
-          style={{
-            padding: "6px 12px",
-            border: "1px solid #2c6ecb",
-            borderRadius: "4px",
-            backgroundColor: "#2c6ecb",
-            color: "white",
-            cursor: isLoading ? "not-allowed" : "pointer",
-            fontSize: "13px",
-            fontWeight: 500,
-            transition: "background-color 0.2s",
-          }}
-          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#1f5199")}
-          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#2c6ecb")}
-        >
-          {isLoading ? "Saving..." : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleCancel();
-          }}
-          disabled={isLoading}
-          className="cancel-button"
+          onClick={handleEdit}
+          className="edit-button"
           style={{
             padding: "6px 12px",
             border: "1px solid #c9cccf",
             borderRadius: "4px",
             backgroundColor: "transparent",
-            color: "#202223",
-            cursor: isLoading ? "not-allowed" : "pointer",
+            color: "#2c6ecb",
+            cursor: "pointer",
             fontSize: "13px",
             fontWeight: 500,
             transition: "background-color 0.2s",
           }}
-          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#f6f6f7")}
-          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "transparent")}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f6f6f7")}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
-          Cancel
+          Chỉnh sửa
         </button>
       </div>
-    );
-  }
-
-  const handleEdit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Reset value to current metafield value when opening edit mode
-    setValue(customer.metafield?.value || "");
-    setIsEditing(true);
-  };
-
-  return (
-    <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
-      <span>{customer.metafield?.value || "Not set"}</span>
-      <button
-        type="button"
-        onClick={handleEdit}
-        className="edit-button"
-        style={{
-          padding: "6px 12px",
-          border: "1px solid #c9cccf",
-          borderRadius: "4px",
-          backgroundColor: "transparent",
-          color: "#2c6ecb",
-          cursor: "pointer",
-          fontSize: "13px",
-          fontWeight: 500,
-          transition: "background-color 0.2s",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f6f6f7")}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-      >
-        Edit
-      </button>
-    </div>
+    </>
   );
 }
 

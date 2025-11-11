@@ -1,0 +1,16 @@
+query CartValidationsGenerateRunInput {
+  cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
+    buyerIdentity {
+      customer {
+        metafield(namespace: "cart_limits", key: "max_amount") {
+          value
+        }
+      }
+    }
+  }
+}

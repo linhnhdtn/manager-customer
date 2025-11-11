@@ -1,0 +1,32 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "7043140551231058d1e1c0188ddb8673"
+name = "manager-customer"
+application_url = "https://example.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# All required scopes for customer management with metafields:
+# - read_customers, write_customers: Read and write customer data
+# - write_products: Manage products
+# - read_orders: View customer order history
+# - read_metaobject_definitions, write_metaobject_definitions: Manage metafield definitions
+scopes = "write_products,read_customers,write_customers,read_orders,read_metaobject_definitions,write_metaobject_definitions"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]

@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, HeadersFunction, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -45,8 +45,7 @@ async function ensureMetafieldDefinition(admin: any) {
   );
 
   if (!exists) {
-    console.log("Creating metafield definition for cart_limits.max_amount");
-    const createResponse = await admin.graphql(
+    await admin.graphql(
       `#graphql
       mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
         metafieldDefinitionCreate(definition: $definition) {
@@ -74,9 +73,6 @@ async function ensureMetafieldDefinition(admin: any) {
         }
       }
     );
-
-    const createJson = await createResponse.json();
-    console.log("Metafield definition creation result:", createJson);
   }
 }
 
@@ -122,8 +118,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const customerId = formData.get("customerId") as string;
   const maxAmount = formData.get("maxAmount") as string;
 
-  console.log("Updating metafield for customer:", customerId, "with value:", maxAmount);
-
   try {
     const response = await admin.graphql(
       `#graphql
@@ -157,11 +151,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
 
     const responseJson = await response.json();
-    console.log("GraphQL Response:", JSON.stringify(responseJson, null, 2));
 
     // Check for GraphQL errors
     if (responseJson.errors) {
-      console.error("GraphQL Errors:", responseJson.errors);
       return {
         success: false,
         error: responseJson.errors[0]?.message || "Unknown error occurred",
@@ -169,7 +161,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (responseJson.data.metafieldsSet.userErrors.length > 0) {
-      console.error("User Errors:", responseJson.data.metafieldsSet.userErrors);
       return {
         success: false,
         error: responseJson.data.metafieldsSet.userErrors[0]?.message || "Unknown error",
@@ -181,7 +172,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       metafield: responseJson.data.metafieldsSet.metafields[0],
     };
   } catch (error) {
-    console.error("Action error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",
@@ -190,26 +180,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 function EditableMetafieldCell({ customer }: { customer: Customer }) {
-  const fetcher = useFetcher<typeof action>();
+  const fetcher = useFetcher<typeof action>({ key: `edit-customer-${customer.id}` });
   const shopify = useAppBridge();
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(customer.metafield?.value || "");
+  const prevStateRef = useRef(fetcher.state);
+  const isSubmittingRef = useRef(false);
 
   const isLoading = fetcher.state === "submitting";
 
-  // Show success toast when update completes
+  // Handle fetcher state changes
   useEffect(() => {
-    if (fetcher.state === "idle" && isEditing) {
+    // Track when we start submitting
+    if (fetcher.state === "submitting") {
+      isSubmittingRef.current = true;
+    }
+
+    // Detect transition from submitting to idle
+    if (isSubmittingRef.current && fetcher.state === "idle" && isEditing) {
       if (fetcher.data?.success) {
         shopify.toast.show("Metafield updated successfully");
         setIsEditing(false);
+        isSubmittingRef.current = false;
       } else if (fetcher.data?.error) {
         shopify.toast.show(`Error: ${fetcher.data.error}`, { isError: true });
+        isSubmittingRef.current = false;
       }
     }
-  }, [fetcher.data?.success, fetcher.data?.error, fetcher.state, isEditing, shopify]);
 
-  const handleSave = () => {
+    prevStateRef.current = fetcher.state;
+  }, [fetcher.state, fetcher.data, isEditing, shopify, customer.id]);
+
+  const handleSave = async () => {
     // Validate that value is a valid number
     if (!value || value.trim() === "") {
       shopify.toast.show("Please enter a valid amount", { isError: true });
@@ -222,12 +224,19 @@ function EditableMetafieldCell({ customer }: { customer: Customer }) {
       return;
     }
 
+    // Mark that we're starting to submit
+    isSubmittingRef.current = true;
+
     fetcher.submit(
       {
         customerId: customer.id,
         maxAmount: value,
       },
-      { method: "POST" }
+      {
+        method: "POST",
+        // Prevent navigation
+        navigate: false,
+      }
     );
   };
 
@@ -243,6 +252,12 @@ function EditableMetafieldCell({ customer }: { customer: Customer }) {
           type="number"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleSave();
+            }
+          }}
           disabled={isLoading}
           placeholder="Enter amount"
           min="0"
@@ -254,26 +269,91 @@ function EditableMetafieldCell({ customer }: { customer: Customer }) {
             flex: 1,
           }}
         />
-        <s-button
-          size="slim"
-          onClick={handleSave}
-          {...(isLoading ? { loading: true } : {})}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSave();
+          }}
+          disabled={isLoading}
+          className="save-button"
+          style={{
+            padding: "6px 12px",
+            border: "1px solid #2c6ecb",
+            borderRadius: "4px",
+            backgroundColor: "#2c6ecb",
+            color: "white",
+            cursor: isLoading ? "not-allowed" : "pointer",
+            fontSize: "13px",
+            fontWeight: 500,
+            transition: "background-color 0.2s",
+          }}
+          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#1f5199")}
+          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#2c6ecb")}
         >
-          Save
-        </s-button>
-        <s-button size="slim" variant="tertiary" onClick={handleCancel} disabled={isLoading}>
+          {isLoading ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleCancel();
+          }}
+          disabled={isLoading}
+          className="cancel-button"
+          style={{
+            padding: "6px 12px",
+            border: "1px solid #c9cccf",
+            borderRadius: "4px",
+            backgroundColor: "transparent",
+            color: "#202223",
+            cursor: isLoading ? "not-allowed" : "pointer",
+            fontSize: "13px",
+            fontWeight: 500,
+            transition: "background-color 0.2s",
+          }}
+          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "#f6f6f7")}
+          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = "transparent")}
+        >
           Cancel
-        </s-button>
+        </button>
       </div>
     );
   }
 
+  const handleEdit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Reset value to current metafield value when opening edit mode
+    setValue(customer.metafield?.value || "");
+    setIsEditing(true);
+  };
+
   return (
     <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
       <span>{customer.metafield?.value || "Not set"}</span>
-      <s-button size="slim" variant="tertiary" onClick={() => setIsEditing(true)}>
+      <button
+        type="button"
+        onClick={handleEdit}
+        className="edit-button"
+        style={{
+          padding: "6px 12px",
+          border: "1px solid #c9cccf",
+          borderRadius: "4px",
+          backgroundColor: "transparent",
+          color: "#2c6ecb",
+          cursor: "pointer",
+          fontSize: "13px",
+          fontWeight: 500,
+          transition: "background-color 0.2s",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f6f6f7")}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+      >
         Edit
-      </s-button>
+      </button>
     </div>
   );
 }

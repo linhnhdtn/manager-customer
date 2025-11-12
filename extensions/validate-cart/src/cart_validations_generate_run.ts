@@ -25,27 +25,50 @@ export function cartValidationsGenerateRun(input: CartValidationsGenerateRunInpu
     return { operations: [{ validationAdd: { errors } }] };
   }
 
-  // Get max_amount value from customer metafield
-  const maxAmountStr = customer.metafield?.value;
-  console.error("Customer metafield value:", maxAmountStr);
+  // Check Cart Limits (cart_limits.max_amount)
+  const cartLimitsMaxAmountStr = customer.cartLimitsMaxAmount?.value;
+  console.error("Cart Limits max_amount:", cartLimitsMaxAmountStr);
 
-  if (maxAmountStr) {
-    const maxAmount = parseFloat(maxAmountStr);
-    console.error("Max amount:", maxAmount);
-    console.error("Comparison: cartTotal > maxAmount =>", cartTotal, ">", maxAmount, "=>", cartTotal > maxAmount);
+  if (cartLimitsMaxAmountStr) {
+    const cartLimitsMaxAmount = parseFloat(cartLimitsMaxAmountStr);
+    console.error("Cart Limits max amount:", cartLimitsMaxAmount);
+    console.error("Comparison: cartTotal > cartLimitsMaxAmount =>", cartTotal, ">", cartLimitsMaxAmount, "=>", cartTotal > cartLimitsMaxAmount);
 
-    // Check if cart total exceeds the limit
-    if (!isNaN(maxAmount) && cartTotal > maxAmount) {
-      console.error("VALIDATION FAILED: Cart total exceeds limit!");
+    // Check if cart total exceeds the cart limit
+    if (!isNaN(cartLimitsMaxAmount) && cartTotal > cartLimitsMaxAmount) {
+      console.error("VALIDATION FAILED: Cart total exceeds cart limit!");
       errors.push({
-        message: `Cart total (${cartTotal.toLocaleString('en-US')}) exceeds the maximum limit (${maxAmount.toLocaleString('en-US')}) for your account.`,
+        message: `Cart total ($${cartTotal.toLocaleString('en-US')}) exceeds the maximum cart limit ($${cartLimitsMaxAmount.toLocaleString('en-US')}) for your account.`,
         target: "$.cart",
       });
     } else {
-      console.error("VALIDATION PASSED: Cart total is within limit");
+      console.error("VALIDATION PASSED: Cart total is within cart limit");
     }
   } else {
-    console.error("No metafield value found, skipping validation");
+    console.error("No cart_limits.max_amount metafield found");
+  }
+
+  // Check Annual Purchase Limit (annual_purchase_limit.max_amount)
+  const annualPurchaseLimitMaxAmountStr = customer.annualPurchaseLimitMaxAmount?.value;
+  console.error("Annual Purchase Limit max_amount:", annualPurchaseLimitMaxAmountStr);
+
+  if (annualPurchaseLimitMaxAmountStr) {
+    const annualPurchaseLimitMaxAmount = parseFloat(annualPurchaseLimitMaxAmountStr);
+    console.error("Annual Purchase Limit max amount:", annualPurchaseLimitMaxAmount);
+    console.error("Comparison: cartTotal > annualPurchaseLimitMaxAmount =>", cartTotal, ">", annualPurchaseLimitMaxAmount, "=>", cartTotal > annualPurchaseLimitMaxAmount);
+
+    // Check if cart total exceeds the annual purchase limit
+    if (!isNaN(annualPurchaseLimitMaxAmount) && cartTotal > annualPurchaseLimitMaxAmount) {
+      console.error("VALIDATION FAILED: Cart total exceeds Annual Purchase Limit!");
+      errors.push({
+        message: `Cart total ($${cartTotal.toLocaleString('en-US')}) exceeds your Annual Purchase Limit ($${annualPurchaseLimitMaxAmount.toLocaleString('en-US')}).`,
+        target: "$.cart",
+      });
+    } else {
+      console.error("VALIDATION PASSED: Cart total is within Annual Purchase Limit");
+    }
+  } else {
+    console.error("No annual_purchase_limit.max_amount metafield found");
   }
 
   const operations = [

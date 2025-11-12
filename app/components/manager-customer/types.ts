@@ -9,6 +9,9 @@ export interface Customer {
   annualLimitMetafield: {
     value: string;
   } | null;
+  annualSpentMetafield: {
+    value: string;
+  } | null;
 }
 
 export interface LoaderData {

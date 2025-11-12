@@ -108,6 +108,42 @@ async function ensureMetafieldDefinition(admin: AdminGraphQL) {
       }
     );
   }
+
+  // Check if annual_spent.amount exists
+  const annualSpentExists = definitions.some((edge) =>
+    edge.node.namespace === "annual_spent" && edge.node.key === "amount"
+  );
+
+  if (!annualSpentExists) {
+    await admin.graphql<MetafieldDefinitionCreateData>(
+      `#graphql
+      mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+        metafieldDefinitionCreate(definition: $definition) {
+          createdDefinition {
+            id
+            namespace
+            key
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: {
+          definition: {
+            name: "Annual Spent Amount",
+            namespace: "annual_spent",
+            key: "amount",
+            description: "Total amount spent by customer in the current year (read-only)",
+            type: "number_integer",
+            ownerType: "CUSTOMER",
+          }
+        }
+      }
+    );
+  }
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -130,6 +166,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               value
             }
             annualLimitMetafield: metafield(namespace: "annual_purchase_limit", key: "max_amount") {
+              value
+            }
+            annualSpentMetafield: metafield(namespace: "annual_spent", key: "amount") {
               value
             }
           }
@@ -380,6 +419,7 @@ export default function ManagerCustomer() {
                 <tr>
                   <th>Name</th>
                   <th>Email</th>
+                  <th>Annual Spent</th>
                   <th>Cart Limit</th>
                   <th>Annual Purchase Limit</th>
                   <th>Actions</th>
@@ -394,6 +434,9 @@ export default function ManagerCustomer() {
                         : "N/A"}
                     </td>
                     <td>{customer.email || "N/A"}</td>
+                    <td>
+                      <MetafieldDisplayCell customer={customer} metafieldType="annualSpent" />
+                    </td>
                     <td>
                       <MetafieldDisplayCell customer={customer} metafieldType="cart" />
                     </td>

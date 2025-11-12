@@ -7,7 +7,10 @@ query CartValidationsGenerateRunInput {
     }
     buyerIdentity {
       customer {
-        metafield(namespace: "cart_limits", key: "max_amount") {
+        cartLimitsMaxAmount: metafield(namespace: "cart_limits", key: "max_amount") {
+          value
+        }
+        annualPurchaseLimitMaxAmount: metafield(namespace: "annual_purchase_limit", key: "max_amount") {
           value
         }
       }

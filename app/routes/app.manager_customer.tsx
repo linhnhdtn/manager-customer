@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs, HeadersFunction, ActionFunctionArgs } from "re
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { BulkUpdateSection, EditableMetafieldCell } from "../components/manager-customer";
+import { BulkUpdateSection, MetafieldDisplayCell, CustomerActionsCell } from "../components/manager-customer";
 import type {
   Customer,
   LoaderData,
@@ -16,12 +16,12 @@ import type {
   Edge,
 } from "../components/manager-customer";
 
-// Helper function to ensure metafield definition exists
+// Helper function to ensure metafield definitions exist
 async function ensureMetafieldDefinition(admin: AdminGraphQL) {
   const checkResponse = await admin.graphql<MetafieldDefinitionsData>(
     `#graphql
     query CheckMetafieldDefinition {
-      metafieldDefinitions(first: 10, ownerType: CUSTOMER) {
+      metafieldDefinitions(first: 20, ownerType: CUSTOMER) {
         edges {
           node {
             id
@@ -37,11 +37,12 @@ async function ensureMetafieldDefinition(admin: AdminGraphQL) {
   const checkJson = await checkResponse.json();
   const definitions = checkJson.data?.metafieldDefinitions?.edges || [];
 
-  const exists = definitions.some((edge) =>
+  // Check if cart_limits.max_amount exists
+  const cartLimitExists = definitions.some((edge) =>
     edge.node.namespace === "cart_limits" && edge.node.key === "max_amount"
   );
 
-  if (!exists) {
+  if (!cartLimitExists) {
     await admin.graphql<MetafieldDefinitionCreateData>(
       `#graphql
       mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
@@ -71,6 +72,42 @@ async function ensureMetafieldDefinition(admin: AdminGraphQL) {
       }
     );
   }
+
+  // Check if annual_purchase_limit.max_amount exists
+  const annualLimitExists = definitions.some((edge) =>
+    edge.node.namespace === "annual_purchase_limit" && edge.node.key === "max_amount"
+  );
+
+  if (!annualLimitExists) {
+    await admin.graphql<MetafieldDefinitionCreateData>(
+      `#graphql
+      mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+        metafieldDefinitionCreate(definition: $definition) {
+          createdDefinition {
+            id
+            namespace
+            key
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: {
+          definition: {
+            name: "Annual Purchase Limit",
+            namespace: "annual_purchase_limit",
+            key: "max_amount",
+            description: "Maximum annual purchase amount allowed for this customer",
+            type: "number_integer",
+            ownerType: "CUSTOMER",
+          }
+        }
+      }
+    );
+  }
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -89,7 +126,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             firstName
             lastName
             email
-            metafield(namespace: "cart_limits", key: "max_amount") {
+            cartLimitMetafield: metafield(namespace: "cart_limits", key: "max_amount") {
+              value
+            }
+            annualLimitMetafield: metafield(namespace: "annual_purchase_limit", key: "max_amount") {
               value
             }
           }
@@ -113,10 +153,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
 
   const isBulkUpdate = formData.get("bulkUpdate") === "true";
-  const maxAmount = formData.get("maxAmount") as string;
 
   try {
     if (isBulkUpdate) {
+      // Bulk update logic - can update cart or annual limits
+      const maxAmount = formData.get("maxAmount") as string;
+      const bulkUpdateType = (formData.get("bulkUpdateType") as string) || "cart";
+      const namespace = bulkUpdateType === "cart" ? "cart_limits" : "annual_purchase_limit";
+      const key = "max_amount";
       // Get all customers for bulk update
       const customersResponse = await admin.graphql<CustomerIdsData>(
         `#graphql
@@ -137,8 +181,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Create metafields array for all customers
       const metafields: MetafieldsSetInput[] = customers.map((customer) => ({
         ownerId: customer.id,
-        namespace: "cart_limits",
-        key: "max_amount",
+        namespace: namespace,
+        key: key,
         value: maxAmount,
         type: "number_integer",
       }));
@@ -201,8 +245,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         totalUpdated,
       };
     } else {
-      // Single customer update
+      // Single customer update - update both metafields
       const customerId = formData.get("customerId") as string;
+      const cartLimit = formData.get("cartLimit") as string;
+      const annualLimit = formData.get("annualLimit") as string;
+
+      // Build metafields array for both limits
+      const metafields: MetafieldsSetInput[] = [];
+
+      if (cartLimit && cartLimit.trim() !== "") {
+        metafields.push({
+          ownerId: customerId,
+          namespace: "cart_limits",
+          key: "max_amount",
+          value: cartLimit,
+          type: "number_integer",
+        });
+      }
+
+      if (annualLimit && annualLimit.trim() !== "") {
+        metafields.push({
+          ownerId: customerId,
+          namespace: "annual_purchase_limit",
+          key: "max_amount",
+          value: annualLimit,
+          type: "number_integer",
+        });
+      }
+
+      // If no metafields to update, return error
+      if (metafields.length === 0) {
+        return {
+          success: false,
+          error: "Please provide at least one value to update",
+        };
+      }
 
       const response = await admin.graphql<MetafieldsSetData>(
         `#graphql
@@ -222,15 +299,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }`,
         {
           variables: {
-            metafields: [
-              {
-                ownerId: customerId,
-                namespace: "cart_limits",
-                key: "max_amount",
-                value: maxAmount,
-                type: "number_integer",
-              },
-            ],
+            metafields: metafields,
           },
         },
       );
@@ -311,7 +380,9 @@ export default function ManagerCustomer() {
                 <tr>
                   <th>Name</th>
                   <th>Email</th>
-                  <th>Max Amount (Cart Limit)</th>
+                  <th>Cart Limit</th>
+                  <th>Annual Purchase Limit</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -324,7 +395,13 @@ export default function ManagerCustomer() {
                     </td>
                     <td>{customer.email || "N/A"}</td>
                     <td>
-                      <EditableMetafieldCell customer={customer} />
+                      <MetafieldDisplayCell customer={customer} metafieldType="cart" />
+                    </td>
+                    <td>
+                      <MetafieldDisplayCell customer={customer} metafieldType="annual" />
+                    </td>
+                    <td>
+                      <CustomerActionsCell customer={customer} />
                     </td>
                   </tr>
                 ))}

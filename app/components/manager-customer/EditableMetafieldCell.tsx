@@ -6,10 +6,11 @@ import type { Customer, ActionResponse } from "./types";
 
 interface EditableMetafieldCellProps {
   customer: Customer;
+  metafieldType: "cart" | "annual";
 }
 
-export function EditableMetafieldCell({ customer }: EditableMetafieldCellProps) {
-  const fetcher = useFetcher<ActionResponse>({ key: `edit-customer-${customer.id}` });
+export function EditableMetafieldCell({ customer, metafieldType }: EditableMetafieldCellProps) {
+  const fetcher = useFetcher<ActionResponse>({ key: `edit-customer-${customer.id}-${metafieldType}` });
   const shopify = useAppBridge();
   const [showModal, setShowModal] = useState(false);
 
@@ -19,6 +20,11 @@ export function EditableMetafieldCell({ customer }: EditableMetafieldCellProps) 
     setShowModal(true);
   };
 
+  // Get the correct metafield value based on type
+  const metafieldValue = metafieldType === "cart"
+    ? customer.cartLimitMetafield?.value
+    : customer.annualLimitMetafield?.value;
+
   return (
     <>
       <EditCustomerModal
@@ -27,10 +33,11 @@ export function EditableMetafieldCell({ customer }: EditableMetafieldCellProps) 
         customer={customer}
         fetcher={fetcher}
         shopify={shopify}
+        metafieldType={metafieldType}
       />
 
       <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
-        <span>{customer.metafield?.value || "Not set"}</span>
+        <span>{metafieldValue || "Not set"}</span>
         <button
           type="button"
           onClick={handleEdit}

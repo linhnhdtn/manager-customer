@@ -2,6 +2,8 @@ export { ConfirmModal } from "./ConfirmModal";
 export { EditCustomerModal } from "./EditCustomerModal";
 export { BulkUpdateSection } from "./BulkUpdateSection";
 export { EditableMetafieldCell } from "./EditableMetafieldCell";
+export { MetafieldDisplayCell } from "./MetafieldDisplayCell";
+export { CustomerActionsCell } from "./CustomerActionsCell";
 export type { Customer, LoaderData, ActionResponse } from "./types";
 export type {
   AdminGraphQL,

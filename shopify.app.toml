@@ -19,6 +19,10 @@ api_version = "2025-10"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders/create"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # All required scopes for customer management with metafields:
@@ -26,7 +30,7 @@ api_version = "2025-10"
 # - write_products: Manage products
 # - read_orders: View customer order history
 # - read_metaobject_definitions, write_metaobject_definitions: Manage metafield definitions
-scopes = "write_products,read_customers,write_customers,read_orders,read_metaobject_definitions,write_metaobject_definitions"
+scopes = "write_products,read_customers,write_customers,read_orders,read_metaobject_definitions,write_metaobject_definitions,read_orders,write_orders"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]

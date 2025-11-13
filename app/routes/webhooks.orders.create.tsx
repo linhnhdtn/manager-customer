@@ -38,8 +38,34 @@ interface OrderWebhookPayload {
   }>;
 }
 
+interface CustomerMetafieldQueryResponse {
+  data?: {
+    customer?: {
+      id: string;
+      metafield?: {
+        value: string;
+      } | null;
+    } | null;
+  };
+}
+
+interface MetafieldsSetResponse {
+  data?: {
+    metafieldsSet?: {
+      metafields?: Array<{
+        id: string;
+        value: string;
+      }>;
+      userErrors?: Array<{
+        field: string[];
+        message: string;
+      }>;
+    };
+  };
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic, payload } = await authenticate.webhook(request);
+  const { shop, topic, payload, admin } = await authenticate.webhook(request);
 
   console.log(`Received ${topic} webhook for ${shop}`);
 
@@ -54,23 +80,86 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.log("Customer ID:", orderData.customer?.id);
     console.log("Line Items:", orderData.line_items.length);
 
-    // TODO: Implement your business logic here
-    // Examples:
-    // 1. Update customer's annual_spent metafield
-    // 2. Check if order exceeds customer's annual purchase limit
-    // 3. Send notification emails
-    // 4. Update inventory tracking
-    // 5. Log order data to database
-
-    // Example: Update annual_spent for customer
-    if (orderData.customer?.id) {
+    // Update annual_spent for customer
+    if (orderData.customer?.id && admin) {
       const customerId = `gid://shopify/Customer/${orderData.customer.id}`;
-      console.log("TODO: Update annual_spent metafield for customer:", customerId);
-      console.log("Order amount to add:", orderData.total_price);
+      const orderTotal = parseFloat(orderData.total_price);
 
-      // You can use admin.graphql here to update metafields
-      // const { admin } = await authenticate.admin(request); // Note: This requires session
-      // For webhooks, you might need to use a different approach or store data for later processing
+      console.log("Updating annual_spent for customer:", customerId);
+      console.log("Order amount to add:", orderTotal);
+
+      // 1. Fetch current annual_spent value
+      const customerResponse = await admin.graphql<CustomerMetafieldQueryResponse>(
+        `#graphql
+        query GetCustomerAnnualSpent($customerId: ID!) {
+          customer(id: $customerId) {
+            id
+            metafield(namespace: "annual_spent", key: "amount") {
+              value
+            }
+          }
+        }`,
+        {
+          variables: {
+            customerId: customerId,
+          },
+        }
+      );
+
+      const customerJson = await customerResponse.json();
+      const currentAnnualSpent = parseFloat(
+        customerJson.data?.customer?.metafield?.value || "0"
+      );
+
+      console.log("Current annual_spent:", currentAnnualSpent);
+
+      // 2. Calculate new total
+      const newAnnualSpent = currentAnnualSpent + orderTotal;
+
+      console.log("New annual_spent:", newAnnualSpent);
+
+      // 3. Update metafield with new total
+      const updateResponse = await admin.graphql<MetafieldsSetResponse>(
+        `#graphql
+        mutation UpdateAnnualSpent($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields {
+              id
+              value
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+        {
+          variables: {
+            metafields: [
+              {
+                ownerId: customerId,
+                namespace: "annual_spent",
+                key: "amount",
+                value: newAnnualSpent.toString(),
+                type: "number_decimal",
+              },
+            ],
+          },
+        }
+      );
+
+      const updateJson = await updateResponse.json();
+
+      if (updateJson.data?.metafieldsSet?.userErrors?.length) {
+        console.error(
+          "Error updating annual_spent:",
+          updateJson.data.metafieldsSet.userErrors
+        );
+      } else {
+        console.log("Successfully updated annual_spent to:", newAnnualSpent);
+      }
+    } else if (!orderData.customer?.id) {
+      console.log("Skipping annual_spent update: Guest checkout");
     }
 
     console.log("=== END ORDER CREATED ===");

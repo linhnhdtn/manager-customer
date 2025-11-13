@@ -137,7 +137,7 @@ async function ensureMetafieldDefinition(admin: AdminGraphQL) {
             namespace: "annual_spent",
             key: "amount",
             description: "Total amount spent by customer in the current year (read-only)",
-            type: "number_integer",
+            type: "number_decimal",
             ownerType: "CUSTOMER",
           }
         }

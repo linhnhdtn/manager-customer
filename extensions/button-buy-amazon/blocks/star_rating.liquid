@@ -1,0 +1,186 @@
+{% assign avg_rating = block.settings.product.metafields.demo.avg_rating.value | round %}
+<span style="color:{{ block.settings.colour }}">
+  {% render 'stars', rating: avg_rating %}
+</span>
+{% if avg_rating >= 4 %}
+  <br>
+  <img src="{{ "thumbs-up.png" | asset_img_url: '15x' }}" height="15" width="15" loading="lazy">
+  {{ 'ratings.home.recommendationText' | t }}
+{% endif %}
+
+
+{% if customer %}
+  {% assign annual_amount = customer.metafields.annual_spent.amount %}
+  {% if customer.default_address %}
+    {% assign country_name = customer.default_address.country %}
+    {% assign country_code = customer.default_address.country_code %}
+  {% elsif customer.addresses.size > 0 %}
+    {% assign country_name = customer.addresses.first.country %}
+    {% assign country_code = customer.addresses.first.country_code %}
+  {% else %}
+    {% assign country_name = nil %}
+  {% endif %}
+
+  <p>
+    Quốc gia:
+    {% if country_name %}
+      {{ country_name }} ({{ country_code }})
+    {% else %}
+      Chưa có địa chỉ
+    {% endif %}
+  </p>
+
+  <p>
+    Tổng đã chi trong năm:
+    {% if annual_amount %}
+      {{ annual_amount | money }}
+    {% else %}
+      0
+    {% endif %}
+  </p>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Star Rating",
+  "target": "section",
+  "settings": [
+    {
+      "type": "product",
+      "id": "product",
+      "label": "product",
+      "autofill": true
+    },
+    {
+      "type": "color",
+      "id": "colour",
+      "label": "Star Colour",
+      "default": "#ff0000"
+    }
+  ]
+}
+{% endschema %}
+
+{% comment %} Dùng trong product.liquid hoặc section product nơi biến `product` có sẵn {% endcomment %}
+{% if product %}
+  {% assign amazon_default = product.metafields.custom.amazon_url %}
+  {% assign amazon_vn = product.metafields.custom.amazon_url_vn %}
+  {% assign amazon_gb = product.metafields.custom.amazon_url_gb %}
+  {% assign amazon_us = product.metafields.custom.amazon_url_us %}
+
+  <div class="amazon-links">
+    {% if amazon_default %}
+      <a href="{{ amazon_default }}" target="_blank" rel="noopener noreferrer">
+        Mua trên Amazon (Default)
+      </a>
+    {% endif %}
+
+    {% if amazon_vn %}
+      <a href="{{ amazon_vn }}" target="_blank" rel="noopener noreferrer">
+        Mua trên Amazon (VN)
+      </a>
+    {% endif %}
+
+    {% if amazon_gb %}
+      <a href="{{ amazon_gb }}" target="_blank" rel="noopener noreferrer">
+        Mua trên Amazon (GB)
+      </a>
+    {% endif %}
+
+    {% if amazon_us %}
+      <a href="{{ amazon_us }}" target="_blank" rel="noopener noreferrer">
+        Mua trên Amazon (US)
+      </a>
+    {% endif %}
+
+    {% if amazon_default == blank and amazon_vn == blank and amazon_gb == blank %}
+      <p>Không có liên kết Amazon cho sản phẩm này.</p>
+    {% endif %}
+  </div>
+{% endif %}
+
+{%- comment -%}
+Logic:
+1. Lấy country_code từ: customer.default_address.country_code -> request.country -> shop.locale
+2. Chuẩn hoá thành ISO2 (uppercase) hoặc locale code (lowercase) cho VN/GB/US mapping
+3. Chọn metafield tương ứng (amazon_url_vn, amazon_url_gb, amazon_url_us, ...)
+4. Fallback về product.metafields.custom.amazon_url nếu không có mapping
+{%- endcomment -%}
+
+{% if product %}
+  {%- comment -%} 1) Lấy country code (kiểm tra nhiều nguồn) {%- endcomment -%}
+  {% assign country_code = '' %}
+  {% if customer %}
+    {% if customer.default_address %}
+      {% assign country_code = customer.default_address.country_code %}
+    {% elsif customer.addresses.size > 0 %}
+      {% assign country_code = customer.addresses.first.country_code %}
+    {% else %}
+      {% assign country_name = nil %}
+    {% endif %}
+  {% endif %}
+
+  <p>
+    Country Code:
+    {% if country_code %}
+      {{ country_code }}
+    {% else %}
+      Chưa có địa chỉ
+    {% endif %}
+  </p>
+
+  {%- comment -%} Chuẩn hoá: uppercase cho ISO2, lowercase cho locale {%- endcomment -%}
+  {% assign country_up = country_code | upcase %}
+  {% assign country_low = country_code | downcase %}
+
+  {%- comment -%} 2) Lấy các metafield product {%- endcomment -%}
+  {% assign amazon_default = product.metafields.custom.amazon_url %}
+  {% assign amazon_vn = product.metafields.custom.amazon_url_vn %}
+  {% assign amazon_gb = product.metafields.custom.amazon_url_gb %}
+  {% assign amazon_us = product.metafields.custom.amazon_url_us %}
+
+  {%- comment -%} 3) Mapping: thêm trường hợp nếu bạn có nhiều region, extend ở đây {%- endcomment -%}
+  {% assign selected_amazon = '' %}
+  <p>
+    Country up:
+      {{ country_up }}
+    amazon_us :
+    {{ amazon_us }}
+    amazon_gb :
+    {{ amazon_gb }}
+  </p>
+  {% if country_up == 'VN' or country_low == 'vi' %}
+    {% if amazon_vn %}
+      {% assign selected_amazon = amazon_vn %}
+    {% endif %}
+  {% elsif country_up == 'GB' or country_up == 'UK' or country_low == 'en-gb' %}
+    {% if amazon_gb %}
+      {% assign selected_amazon = amazon_gb %}
+    {% endif %}
+  {% elsif country_up == 'US' or country_up == 'USA' or country_low == 'en-us' %}
+    {% if amazon_us %}
+      {% assign selected_amazon = amazon_us %}
+    {% endif %}
+  {% endif %}
+  selected_amazon = {{ selected_amazon }};
+  {%- comment -%} 4) Nếu chưa có link theo country thì fallback về default {%- endcomment -%}
+  {% if selected_amazon == '' and amazon_default %}
+    {% assign selected_amazon = amazon_default %}
+  {% endif %}
+  {%- comment -%} 5) Render button/link (an toàn: escape, open in new tab) {%- endcomment -%}
+  {% if selected_amazon %}
+    <a
+      href="{{ selected_amazon | escape }}"
+      class="btn btn--amazon"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Mua trên Amazon">
+      Mua trên Amazon sss cgheck
+    </a>
+  {% else %}
+    <p class="muted">Chưa có liên kết Amazon cho sản phẩm này.</p>
+  {% endif %}
+{% endif %}
+
+
+
